@@ -27,7 +27,7 @@ import type {
 import type { ChatSnapshot } from './contract/snapshot.ts'
 import { EMPTY_CHAT_SNAPSHOT } from './contract/snapshot.ts'
 import { ApprovalCommand } from './chat/ApprovalCommand.tsx'
-import { ChatView } from './chat/ChatView.tsx'
+import { ChatContent, ChatEntry } from './chat/ChatContent.tsx'
 import { registerChatNodeRenderers } from './chat/register-node-renderers.ts'
 import { StatsPills } from './chat/StatsPills.tsx'
 import { registerConversationNodes } from './conversation-nodes/register.ts'
@@ -175,12 +175,9 @@ export function apply(ctx: Context): void {
     }),
   }, TranscriptViewRow))
 
-  ctx.slots.inject('conversation.view', () => {
-    const disposeView = ctx.slots.register({
-      name: 'conversation.view',
-      id: 'chat',
-      order: 0,
-      label: () => t('view.chat'),
+  ctx.effect(() => ctx.slots.registerFactory({
+      name: 'conversation.chat.content',
+      scope: 'session',
       locale: NS,
       children: {
         'conversation.chat.node': { kind: 'keyed', scope: 'session', inject: CHAT_NODE_INJECT },
@@ -258,9 +255,11 @@ export function apply(ctx: Context): void {
           },
         }
       },
-    }, ChatView)
-    return disposeView
-  })
+    }, ChatContent))
+  ctx.slots.inject('conversation.view', () => ctx.slots.register({
+    name: 'conversation.view', id: 'chat', order: 0,
+    label: () => t('view.chat'), locale: NS,
+  }, ChatEntry))
 
   // The quota notice host lives in the frame-wide layer so a notice outlives
   // the Chat panel that reported it. Its chain child lets a package with a

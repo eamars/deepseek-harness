@@ -10,6 +10,8 @@ Desktop product events use the optional [product analytics service](../product-a
 
 ## Summary
 
+`conversation.chat.content` is a Session-scoped Component Factory. Its `main` variant renders the normal Chat view; `fragment` renders the Session's grouped Chat entries of selected native Node kinds between an exclusive `after` and inclusive `through` anchor sequence (a group by its first member), through the same list, Turn-process folding and disclosures as the main Chat. The caller supplies an authorized retained Session binding through `SessionProvider`. A fragment shares native message, tool, image and disclosure components, with no composer or separate scrollport. It does not copy events into the enclosing Session or affect model context. History loading remains with the Session Controller; the native older-history control remains available. Fragment DOM anchors are excluded from enclosing Chat navigation and scroll memory.
+
 Use this package to render a browser chat from recorded Session conversations, including historical images, localized actions, and restored scroll position. Work-details modes control reasoning previews and process visibility without hiding final answers; Verbose keeps completed-turn process rows visible. Local transcript and steering submissions appear immediately, remain in their original surface, and disappear atomically when authoritative Session records arrive, while queued submissions stay outside Chat. The package does not assemble or modify model requests.
 
 File-mention providers receive the viewed Session ID with the closing-turn owner, so links into inherited history can address the fork itself.

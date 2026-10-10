@@ -63,7 +63,8 @@ type ChatNodeListProps = Omit<ComponentProps<typeof ChatNodeSeat>, 'nodeKey' | '
   readonly lastInputTurn: number | undefined
 }
 
-const ChatNodeList = memo(function ChatNodeList({ entries, useChatGroup, pendingInputs, lastInputTurn, ...seatProps }: ChatNodeListProps) {
+/** Native rows for grouped entries; also seats a source-scoped Chat fragment (ChatContent). */
+export const ChatNodeList = memo(function ChatNodeList({ entries, useChatGroup, pendingInputs, lastInputTurn, ...seatProps }: ChatNodeListProps) {
   const rows = entries.map((entry) => {
     switch (entry.kind) {
       case 'node':

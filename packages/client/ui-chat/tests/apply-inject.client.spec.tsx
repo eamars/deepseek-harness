@@ -110,8 +110,9 @@ async function bench(initialSettings?: ChatSettings, withBrowserRegistry = true,
 
   const chatViewApi = (reference: SessionReference) => {
     const id = reference.sessionId
-    const entry = runtime.slots.entries('conversation.view')[0]!
-    const instance = runtime.storeOf('conversation.view', reference) as ChatInstance
+    runtime.ctx.uiSession.adapter.bindingSource(reference).getSnapshot()
+    const entry = runtime.factoryOf('conversation.chat.content')
+    const instance: ChatInstance = createChatStore().create()
     const injected = (entry.inject as unknown as (
       sessionId: SessionId,
       actions: ChatActions,
@@ -393,7 +394,7 @@ describe('Chat inject API', () => {
 
   it('fails loud when a Chat View inject resolves no Session', async () => {
     const b = await bench()
-    const entry = b.runtime.slots.entries('conversation.view')[0]!
+    const entry = b.runtime.factoryOf('conversation.chat.content')
     const injectView = entry.inject as unknown as (
       sessionId: SessionId,
       actions: ChatActions,
