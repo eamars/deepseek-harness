@@ -22,6 +22,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     'renderer.factory.child': { kind: 'list'; scope: 'root' }
     'renderer.factory.chain': { kind: 'chain'; scope: 'root'; owner: { enabled: boolean } }
     'renderer.factory.session-area': { kind: 'single'; scope: 'session' }
+    'renderer.cross-session.child': { kind: 'single'; scope: 'session' }
   }
 
   interface LocaleNamespaceMap {
@@ -44,6 +45,11 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
       }
     }
     'renderer.recursive-factory': { scope: 'root' }
+    'renderer.cross-session-factory': {
+      scope: 'session'
+      props: { next: readonly SessionReference[] }
+      children: { 'renderer.cross-session.child': { kind: 'single'; scope: 'session' } }
+    }
     'renderer.session-store-factory': {
       scope: 'session'
       store: CounterStore
@@ -352,6 +358,33 @@ describe('Factory rendering', () => {
     expect(() => renderChain('renderer.factory.child', {})).toThrow(/not 'chain'/)
     dispose()
     expect(() => renderChain('renderer.factory.chain', { enabled: true })).toThrow(/disposed Factory/)
+    await runtime.dispose()
+  })
+
+  it.each([false, true])('composes distinct authorized sessions and rejects a source cycle (cycle: %s)', async cycle => {
+    const runtime = await SlotTestRuntime.create()
+    await runtime.sessions.add({ id: 'first-source' })
+    await runtime.sessions.add({ id: 'second-source' })
+    const first = runtime.sessions.retainFor(runtime.ctx, sid('first-source'))
+    const second = runtime.sessions.retainFor(runtime.ctx, sid('second-source'))
+    runtime.slots.registerFactory({ name: 'renderer.cross-session-factory', scope: 'session',
+      children: { 'renderer.cross-session.child': { kind: 'single', scope: 'session' } },
+    }, ({ sessionId, next, SessionProvider, renderFactorySlot }) => <>
+      <span>{sessionId};</span>
+      {next[0] && <SessionProvider session={next[0]}>
+        {renderFactorySlot('renderer.cross-session-factory', { next: next.slice(1) })}
+      </SessionProvider>}
+    </>)
+    await runtime.root.declare(SESSION_AREA, ({ renderFactorySlot, SessionProvider }) => (
+      <SessionProvider session={first}>
+        {renderFactorySlot('renderer.cross-session-factory', { next: cycle ? [second, first] : [second] })}
+      </SessionProvider>
+    ))
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const view = runtime.renderRoot()
+    expect(view.container.textContent).toBe(cycle ? 'first-source;' : 'first-source;second-source;')
+    expect(view.container.querySelector('[data-factory-error="renderer.cross-session-factory"]') !== null).toBe(cycle)
+    spy.mockRestore()
     await runtime.dispose()
   })
 
