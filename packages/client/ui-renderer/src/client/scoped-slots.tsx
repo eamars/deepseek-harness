@@ -989,21 +989,29 @@ function FactoryOutlet({ name, inputProps, slots: selected = EMPTY_FACTORY_SELEC
     () => host.getFactoryVersion(name),
   )
   const definition = host.factoryOf(name)
-  const nextAncestors = useMemo(() => new Set(ancestors).add(name), [ancestors, name])
+  // A factory may compose another authorized session using the same native
+  // assembly. Guard the scoped occurrence, so A -> B is valid but A -> B -> A
+  // remains a cycle. Root factories retain the original name-only behavior.
+  const scopeIdentity = definition?.scope === 'root'
+    ? 'root'
+    : definition?.scope === 'session'
+      ? binding.key === undefined
+        ? 'session:absent'
+        : `session:${sessionGenerationKeyOf(binding as ScopedStandardSourceBinding)}`
+      : `session-maybe:${maybeEpoch}`
+  // Source identity belongs to cycle detection, not the mounted surface key:
+  // session-maybe surfaces deliberately retain their resident composer.
+  const sourceIdentity = definition?.scope === 'session-maybe' && binding.key !== undefined
+    ? sessionGenerationKeyOf(binding as ScopedStandardSourceBinding) : scopeIdentity
+  const occurrenceIdentity = JSON.stringify([name, sourceIdentity])
+  const nextAncestors = useMemo(() => new Set(ancestors).add(occurrenceIdentity), [ancestors, occurrenceIdentity])
   if (definition === undefined) return <>{fallback ?? null}</>
-  if (ancestors.has(name)) throw new SlotOwnershipError(`recursive render of factory '${name}'`)
+  if (ancestors.has(occurrenceIdentity)) throw new SlotOwnershipError(`recursive render of factory '${name}'`)
   for (const localName of Object.keys(selected)) {
     if (definition.slots?.[localName] === undefined) {
       throw new SlotOwnershipError(`local slot '${localName}' is not declared by factory '${name}'`)
     }
   }
-  const scopeIdentity = definition.scope === 'root'
-    ? 'root'
-    : definition.scope === 'session'
-      ? binding.key === undefined
-        ? 'session:absent'
-        : `session:${sessionGenerationKeyOf(binding as ScopedStandardSourceBinding)}`
-      : `session-maybe:${maybeEpoch}`
   return (
     <FactoryErrorBoundary
       key={`${name}:${version}:${scopeIdentity}`}
