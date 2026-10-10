@@ -26,6 +26,8 @@ interface ChatNodeSeatProps extends ChatNodeOwnerProps {
   readonly useChatNodeBottom: ChatFlowSlotProps['useChatNodeBottom']
   readonly deferCollapse: boolean
   readonly useGroupAction: ChatFlowSlotProps['useGroupAction']
+  /** A fragment's rows are folded by the enclosing Chat, not by their Turn's process. */
+  readonly fragment?: boolean
 }
 
 type RoutedChatNodeOwner = {
@@ -51,6 +53,7 @@ export const ChatNodeSeat = memo(function ChatNodeSeat({
   nodeKey, groupPart, useChatNode, useChatNodeProcess, usePresentation,
   cwd, openFile, inspectCall, forkAt,
   loadImage, useStore, actions, renderSlot, t, useChatNodeBottom, deferCollapse, useGroupAction,
+  fragment = false,
 }: ChatNodeSeatProps) {
   const bottom = useChatNodeBottom(nodeKey)
   const node = useChatNode(nodeKey)
@@ -72,7 +75,7 @@ export const ChatNodeSeat = memo(function ChatNodeSeat({
   const foldCompleted = usePresentation(policy => policy.foldCompletedTurns)
   const keepReplies = usePresentation(policy => policy.foldedReplies === 'all')
   // A loaded end makes a partial historical Turn eligible without its start.
-  const processWindowReady = processSpec !== undefined
+  const processWindowReady = !fragment && processSpec !== undefined
     && processPresentation !== undefined
     && foldCompleted
     && processPresentation.turn === processSpec.turn
