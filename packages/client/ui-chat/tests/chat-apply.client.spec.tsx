@@ -147,7 +147,8 @@ describe('Chat apply wiring', () => {
     onTestFinished(() => b.runtime.dispose())
     b.runtime.renderRoot()
     expect(b.runtime.slots.spec('conversation.chat.flow')).toMatchObject({ kind: 'single', scope: 'session' })
-    const view = b.runtime.slots.entries('conversation.view')[0]
+    b.runtime.renderRoot()
+    const view = b.runtime.factoryOf('conversation.chat.content')
     const flow = b.runtime.slots.entries('conversation.chat.flow')[0]
     const assistant = b.runtime.slots.entries('conversation.chat.node').find(entry => entry.options.key === 'assistant-step')
     const userContent = b.runtime.factoryOf('conversation.chat.user.content')
@@ -274,7 +275,8 @@ describe('Chat apply wiring', () => {
   it('shares one Chat store while keeping it distinct from Conversation state', async () => {
     const b = await bench()
     const conversationStore = storeOf(b.runtime, 'conversation.session')
-    const chatStore = storeOf(b.runtime, 'conversation.view')
+    b.runtime.renderRoot()
+    const chatStore = b.runtime.factoryOf('conversation.chat.content').store
     expect(storeOf(b.runtime, 'conversation.session.header')).toBe(conversationStore)
     expect(chatStore).toBeDefined()
     expect(chatStore).not.toBe(conversationStore)
