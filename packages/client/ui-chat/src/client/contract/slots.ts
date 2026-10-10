@@ -8,10 +8,11 @@ import type { InboxState } from '@deepseek-ai/dsh-agent/types'
 import type {
   CommandNode, CompactionSummaryNode, ConversationLocationDataStore, ConversationTurnDataMap,
   ConversationGroupData, GroupSnapshot,
-  MessageImageLoader, MessageImageSource, MessageImagesOwnerProps, RenderEntry, TurnLocation, UserTextFacts, UserTextInput,
+  ConvViewOwnerProps, MessageImageLoader, MessageImageSource, MessageImagesOwnerProps, RenderEntry, TurnLocation,
+  UserTextFacts, UserTextInput,
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {
-  HostObservable, InjectFace, KeyedSnapshotSelectorHook, PropsLocale, PropsRenderSlots, PropsRuntime,
+  FactoryComponentPropsOf, HostObservable, InjectFace, KeyedSnapshotSelectorHook, PropsLocale, PropsRenderSlots, PropsRuntime,
   PropsRenderFactories, PropsStore, SlotHookFactory, SnapshotSelectorHook,
 } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
@@ -335,6 +336,11 @@ export interface ChatFlowOwnerProps extends Pick<ChatNodeOwnerProps,
   readonly pendingInputs: readonly (PendingSubmission | InboxState['next-step'][number])[]
   readonly lastInputTurn: number | undefined
   readonly deferCollapse: boolean
+  /**
+   * Rows of a Session shown inside another Chat, whose own row folds them: no running status and no
+   * Turn-process folding.
+   */
+  readonly fragment?: boolean
 }
 
 /** Full props of the Chat-owned flow renderer. */
@@ -354,11 +360,40 @@ export type ChatViewSlotProps =
   & InjectFace<ChatViewInjected>
   & PropsLocale<'chat'>
 
+/** Source-scoped Chat occurrence; fragment sequence bounds do not alter model history. */
+export type ChatContentInputProps =
+  | ({ readonly variant: 'main' } & ConvViewOwnerProps)
+  | {
+    readonly variant: 'fragment'
+    readonly after?: SessionSeq
+    readonly through?: SessionSeq
+    readonly kinds: readonly ChatNodeKind[]
+  }
+
+/** Full props of the native Chat content factory. */
+export type ChatContentProps = FactoryComponentPropsOf<'conversation.chat.content'>
+
+/** Main Conversation entry delegating to the native Chat factory. */
+export type ChatEntryProps = PropsRuntime<'conversation.view'> & PropsRenderFactories
+
 /** Full props shared by the user and output image entries. */
 export type MessageImagesProps =
   PropsRuntime<'conversation.chat.user.images' | 'conversation.chat.message.images'> & PropsRenderFactories
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
+  interface SlotFactoryMap {
+    /** Native transcript rendering without an additional composer or scrolling container. */
+    'conversation.chat.content': {
+      scope: 'session'
+      props: ChatContentInputProps
+      children: {
+        'conversation.chat.flow': { kind: 'single'; scope: 'session'; inject: ChatFlowInjected }
+      }
+      store: ChatStore
+      inject: ChatViewInjected
+      locale: 'chat'
+    }
+  }
   interface SessionStandardProps {
     /** Selector hook over the current Conversation binding's Chat target. */
     useChat: UseChat
