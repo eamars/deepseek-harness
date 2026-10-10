@@ -226,7 +226,7 @@ export class ChatViewport {
     if (this.elements === null) return null
     // Reading anchors name exact parts; Turn navigation names the original Node.
     let nodePart: HTMLElement | null = null
-    for (const row of this.elements.list.querySelectorAll<HTMLElement>('[data-chat-anchor-key]:not([hidden]):not([hidden] *)')) {
+    for (const row of this.elements.list.querySelectorAll<HTMLElement>('[data-chat-anchor-key]:not([hidden]):not([hidden] *):not([data-chat-fragment] *)')) {
       if (row.dataset.chatAnchorKey === key || (identity === 'node' && row.dataset.chatNodeKey === key)) return row
       if (nodePart === null && row.dataset.chatNodeKey === key) nodePart = row
     }
@@ -249,7 +249,9 @@ export class ChatViewport {
       const left = Math.max(viewport.left, content.left)
       const right = Math.min(viewport.right, content.right)
       for (const element of document.elementsFromPoint(left + Math.max(0, right - left) / 2, viewport.top + 1)) {
-        const row = element instanceof HTMLElement ? element.closest<HTMLElement>('[data-chat-anchor-key]') : null
+        const fragment = element instanceof HTMLElement ? element.closest<HTMLElement>('[data-chat-fragment]') : null
+        const origin = fragment?.parentElement ?? element
+        const row = origin instanceof HTMLElement ? origin.closest<HTMLElement>('[data-chat-anchor-key]') : null
         if (row !== null && row.dataset.chatFlowKind !== 'turn-process' && list.contains(row)) {
           // An open group's header stays put while older members enter above its body content.
           anchor = row.dataset.chatGroupKey === undefined ? row
@@ -261,7 +263,7 @@ export class ChatViewport {
     if (anchor === null) {
       const rows = list.querySelectorAll<HTMLElement>(
         '[data-chat-flow-key]:not([data-chat-group-key]):not([data-chat-flow-kind="turn-process"])'
-        + ':not(:empty):not([hidden]):not([hidden] *)',
+        + ':not(:empty):not([hidden]):not([hidden] *):not([data-chat-fragment] *)',
       )
       let low = 0
       let high = rows.length
@@ -357,7 +359,7 @@ export class ChatViewport {
   beginPaging(): void {
     this.stopPreserving()
     const row = this.elements?.list.querySelector<HTMLElement>(
-      '[data-chat-paging-anchor]:not(:empty):not([hidden]):not([hidden] *)',
+      '[data-chat-paging-anchor]:not(:empty):not([hidden]):not([hidden] *):not([data-chat-fragment] *)',
     )
     if (row != null) this.retain(row)
   }

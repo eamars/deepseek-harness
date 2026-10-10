@@ -11,13 +11,13 @@ import { RunningStatus } from './RunningStatus.tsx'
 
 /** Render the flow without adding a DOM parent or changing keyed row positions. */
 export const ChatFlow = memo(function ChatFlow({
-  entries, pendingInputs, lastInputTurn, deferCollapse,
+  entries, pendingInputs, lastInputTurn, deferCollapse, fragment = false,
   useSession, useChat, useChatNode, useChatNodeBottom, useChatNodeProcess, useChatGroup, usePresentation,
   useStore, actions, renderSlot, t, useGroupAction, useGroupHeaderAction,
   cwd, openFile, openSkill, inspectCall, forkAt, loadImage, fileMentions,
 }: ChatFlowSlotProps) {
   const nodeStore = useChat(snapshot => snapshot.nodes)
-  const running = useSession(snapshot => snapshot.running)
+  const running = useSession(snapshot => snapshot.running) && !fragment
   const latestTurnAnchor = useChat(snapshot => snapshot.navigation.items().at(-1)?.anchorKey)
   const runningStartTime = useChatNode(latestTurnAnchor ?? '', (node) => {
     const location = node?.location
@@ -31,7 +31,7 @@ export const ChatFlow = memo(function ChatFlow({
   )
   const seatProps = {
     nodeStore, useChatNode, useChatNodeBottom, useChatNodeProcess, usePresentation,
-    useStore, actions, renderSlot, t, useGroupAction, deferCollapse,
+    useStore, actions, renderSlot, t, useGroupAction, deferCollapse, fragment,
     cwd, openFile, openSkill, inspectCall, forkAt, loadImage, renderMessageImages, fileMentions,
   }
   const rows = entries.map((entry) => {

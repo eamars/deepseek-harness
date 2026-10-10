@@ -28,7 +28,7 @@ import type {
 import type { ChatSnapshot } from './contract/snapshot.ts'
 import { EMPTY_CHAT_SNAPSHOT } from './contract/snapshot.ts'
 import { ApprovalCommand } from './chat/ApprovalCommand.tsx'
-import { ChatView } from './chat/ChatView.tsx'
+import { ChatContent, ChatEntry } from './chat/ChatContent.tsx'
 import { ChatFlow } from './chat/ChatFlow.tsx'
 import { registerChatNodeRenderers } from './chat/register-node-renderers.ts'
 import { ActivityPill, UsagePill } from './chat/StatsPills.tsx'
@@ -220,85 +220,84 @@ export function apply(ctx: Context): void {
     },
   }, ChatFlow))
 
-  ctx.slots.inject('conversation.view', () => {
-    const disposeView = ctx.slots.register({
-      name: 'conversation.view',
-      id: 'chat',
-      order: 0,
-      label: () => t('view.chat'),
-      locale: NS,
-      children: {
-        'conversation.chat.flow': { kind: 'single', scope: 'session', inject: CHAT_FLOW_INJECT },
-      },
-      store: chatStore,
-      inject: (sessionId: SessionId): ChatViewInjected => {
-        const binding = ctx.sessions.binding(sessionId)
-        if (binding === undefined) throw new Error(`ui-chat: unknown session "${sessionId}"`)
-        const session = binding.session
-        const chat = chatSource(binding)
-        return {
-          ...nodeSources(binding),
-          fileMentions: (owner: TurnTailOwnerProps) => ctx.get('chatFileMentions')?.forClosing(owner, sessionId),
-          // Files open in the right Sidebar, not in a desktop application: the
-          // content stays in the product, beside the conversation that produced
-          // it. A relative path, or an absolute one inside the session's
-          // workspace, is addressed under this session's scope,
-          // `dsh-resource://file/session/<id>/<path>`; an absolute path
-          // elsewhere keeps its absolute spelling in the same Session's address.
-          // Which tab type claims the
-          // address is the Sidebar's decision, not this call site's.
-          // A line travels as a navigation parameter, not as part of the
-          // address: the file is one piece of content whether it is opened at
-          // its top or at line 400, so the same tab is revealed and told where
-          // to land.
-          openFile: async (path, options) => {
-            const cwd = ctx.sessions.list.getSnapshot().byId[sessionId]?.cwd
-            const url = fileAddressFor(sessionId, cwd, path)
-            if (options?.line === undefined) ctx.sidebarRight.openResource(url)
-            else ctx.sidebarRight.openResource(url, { params: { line: options.line } })
-            await Promise.resolve()
+  ctx.effect(() => ctx.slots.registerFactory({
+    name: 'conversation.chat.content',
+    scope: 'session',
+    locale: NS,
+    children: {
+      'conversation.chat.flow': { kind: 'single', scope: 'session', inject: CHAT_FLOW_INJECT },
+    },
+    store: chatStore,
+    inject: (sessionId: SessionId): ChatViewInjected => {
+      const binding = ctx.sessions.binding(sessionId)
+      if (binding === undefined) throw new Error(`ui-chat: unknown session "${sessionId}"`)
+      const session = binding.session
+      const chat = chatSource(binding)
+      return {
+        ...nodeSources(binding),
+        fileMentions: (owner: TurnTailOwnerProps) => ctx.get('chatFileMentions')?.forClosing(owner, sessionId),
+        // Files open in the right Sidebar, not in a desktop application: the
+        // content stays in the product, beside the conversation that produced
+        // it. A relative path, or an absolute one inside the session's
+        // workspace, is addressed under this session's scope,
+        // `dsh-resource://file/session/<id>/<path>`; an absolute path
+        // elsewhere keeps its absolute spelling in the same Session's address.
+        // Which tab type claims the
+        // address is the Sidebar's decision, not this call site's.
+        // A line travels as a navigation parameter, not as part of the
+        // address: the file is one piece of content whether it is opened at
+        // its top or at line 400, so the same tab is revealed and told where
+        // to land.
+        openFile: async (path, options) => {
+          const cwd = ctx.sessions.list.getSnapshot().byId[sessionId]?.cwd
+          const url = fileAddressFor(sessionId, cwd, path)
+          if (options?.line === undefined) ctx.sidebarRight.openResource(url)
+          else ctx.sidebarRight.openResource(url, { params: { line: options.line } })
+          await Promise.resolve()
+        },
+        openSkill: (name) => {
+          const scope = ctx.sessions.scope(sessionId)
+          if (scope === undefined) return
+          ctx.get('inputTriggers')?.sessionOf(scope).openReference('skill', { ref: `/${name}` })
+        },
+        openExternalLink: (url) => {
+          if (linkOpening.getSnapshot() === 'sidebar' && ctx.get('sidebarRightTabs')?.get('browser') !== undefined) {
+            ctx.sidebarRight.openTab('browser', { params: { url } })
+          } else {
+            window.open(url, '_blank', 'noopener,noreferrer')
+          }
+        },
+        loadOlder: () => { void session.loadOlder() },
+        loadThrough: seq => session.loadThrough(seq),
+        loadImage: Object.assign(
+          (attachment: ImageAttachmentRef) => ctx.uiConversation.imageUrl(sessionId, attachment),
+          { peek: (attachment: ImageAttachmentRef) => ctx.uiConversation.peekImageUrl(sessionId, attachment) },
+        ),
+        chatScroll: {
+          save: (position) => {
+            if (position === null) chatScrollPositions.delete(sessionId)
+            else chatScrollPositions.set(sessionId, position)
           },
-          openSkill: (name) => {
-            const scope = ctx.sessions.scope(sessionId)
-            if (scope === undefined) return
-            ctx.get('inputTriggers')?.sessionOf(scope).openReference('skill', { ref: `/${name}` })
-          },
-          openExternalLink: (url) => {
-            if (linkOpening.getSnapshot() === 'sidebar' && ctx.get('sidebarRightTabs')?.get('browser') !== undefined) {
-              ctx.sidebarRight.openTab('browser', { params: { url } })
-            } else {
-              window.open(url, '_blank', 'noopener,noreferrer')
-            }
-          },
-          loadOlder: () => { void session.loadOlder() },
-          loadThrough: seq => session.loadThrough(seq),
-          loadImage: Object.assign(
-            (attachment: ImageAttachmentRef) => ctx.uiConversation.imageUrl(sessionId, attachment),
-            { peek: (attachment: ImageAttachmentRef) => ctx.uiConversation.peekImageUrl(sessionId, attachment) },
-          ),
-          chatScroll: {
-            save: (position) => {
-              if (position === null) chatScrollPositions.delete(sessionId)
-              else chatScrollPositions.set(sessionId, position)
-            },
-            read: () => chatScrollPositions.get(sessionId) ?? null,
-          },
-          forkAt: (seq) => {
-            const turn = [...chat.getSnapshot().timeline.turns.values()].find(turn => turn.end?.seq === seq)
-            const messageId = turn?.data.get('turn-tail')?.closing?.finalNode.messageId
-            ctx.sessions.fork({ sessionId, atSeq: seq, increaseTitle: true, onCreated: (childId) => {
-              ctx.get('productAnalytics')?.track('branch_session_click', { session_id: childId, parent_session_id: sessionId, ...messageId === undefined ? {} : { parent_message_id: messageId }, click_position: 'footer' })
-            } })
-              .then((childId) => { ctx.uiWorkspace.openSession(childId) })
-              .catch(() => {
-                // Fork or child-title failure leaves the source view unchanged.
-              })
-          },
-        }
-      },
-    }, ChatView)
-    return disposeView
-  })
+          read: () => chatScrollPositions.get(sessionId) ?? null,
+        },
+        forkAt: (seq) => {
+          const turn = [...chat.getSnapshot().timeline.turns.values()].find(turn => turn.end?.seq === seq)
+          const messageId = turn?.data.get('turn-tail')?.closing?.finalNode.messageId
+          ctx.sessions.fork({ sessionId, atSeq: seq, increaseTitle: true, onCreated: (childId) => {
+            ctx.get('productAnalytics')?.track('branch_session_click', { session_id: childId, parent_session_id: sessionId, ...messageId === undefined ? {} : { parent_message_id: messageId }, click_position: 'footer' })
+          } })
+            .then((childId) => { ctx.uiWorkspace.openSession(childId) })
+            .catch(() => {
+              // Fork or child-title failure leaves the source view unchanged.
+            })
+        },
+      }
+    },
+  }, ChatContent))
+  ctx.slots.inject('conversation.view', () => ctx.slots.register({
+    name: 'conversation.view', id: 'chat', order: 0,
+    label: () => t('view.chat'), locale: NS,
+  }, ChatEntry))
 
   // The quota notice host lives in the frame-wide layer so a notice outlives
   // the Chat panel that reported it. Its chain child lets a package with a

@@ -48,6 +48,23 @@ function fixture() {
   return { column, viewport, group, row, prepend: (height: number) => { prependedHeight += height } }
 }
 
+it('keeps foreign source keys outside main-session navigation and reading anchors', () => {
+  const h = fixture()
+  const owner = h.row(h.column, 'reference', 0)
+  const fragment = document.createElement('div')
+  fragment.dataset.chatFragment = 'other-session'
+  owner.append(fragment)
+  const foreign = h.row(fragment, 'same-key', 20)
+  const native = h.row(h.column, 'same-key', 400)
+  h.viewport.updateTurns([{ turn: 1, anchorKey: 'same-key', prompt: '', response: '' }])
+  h.viewport.scrollToTurn(1)
+  expect(h.column.scrollTop).toBeGreaterThan(300)
+  expect(vi.spyOn(native, 'getBoundingClientRect')).toHaveBeenCalled()
+  h.column.scrollTop = 0
+  Object.defineProperty(document, 'elementsFromPoint', { configurable: true, value: () => [foreign] })
+  expect(h.viewport.capturePosition()?.anchorKey).toBe('reference')
+})
+
 it.each([
   { count: 64, slot: false }, { count: 4096, slot: false },
   { count: 64, slot: true }, { count: 4096, slot: true },
