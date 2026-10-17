@@ -6,11 +6,15 @@ existing `settings.section` slot.
 
 - `client.js` is the client half of `@soyo/dsh-dashboard` from the
   [Agent-for-qqbot](https://github.com/jixiong398-blip/Agent-for-qqbot) product.
-- It registers settings pages after `agent-presets` (`order: 20`):
+- `setup-api.mjs` is the host-side `botSetup` remote service that backs the
+  pages (fixed private supervisor API; no arbitrary URL/command).
+- Pages registered after `agent-presets` (`order: 20`):
   - `soyo-bot-models` (order 30, 模型与脑区)
   - `soyo-bot-persona` (order 31, 角色设定)
   - `soyo-bot-qq` (order 32, NapCat / QQ)
-  - `soyo-dashboard` (order 34, 管理 Web)
+  - `soyo-dashboard` (order 34, 管理 Web — embedded service status,
+    start/stop controls and per-service logs, with an optional link to the
+    standalone management console)
 - Registration shape:
 
   ```js
@@ -22,7 +26,8 @@ existing `settings.section` slot.
   the shell owns modal visibility and navigation. The registrant re-registers
   with fresh text on locale change.
 - The product's former sidebar-footer shortcuts were removed in favour of these
-  pages.
+  pages; the owner session is opened from the normal session list, so it has no
+  settings page of its own.
 
 Scope: the copy and panels are product-specific (Bot / NapCat). This PR is
 shared as an implementation reference; feel free to close it if it is not useful

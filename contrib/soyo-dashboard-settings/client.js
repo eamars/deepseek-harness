@@ -209,6 +209,10 @@ select.bqs-control { appearance: none; padding-right: 34px; cursor: pointer; }
   .bqs-page .bqs-top { padding: 0 0 16px; }
   .bqs-page .bqs-scroll { padding: 0; overflow: visible; flex: 1; }
   .bqs-page .bqs-footer { padding: 16px 0 0; background: transparent; }
+  .bqs-service-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid var(--bqs-line); }
+  .bqs-service-row:first-child { border-top: 0; }
+  .bqs-service-name { display: block; font-size: 13px; font-weight: 500; }
+  .bqs-logs { margin: 0; padding: 12px 14px; max-height: 320px; overflow: auto; border: 1px solid var(--bqs-line); border-radius: 11px; background: var(--bqs-soft); font: 12px/1.6 ui-monospace, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 `;
     const ICONS = {
       layers: ['m12 3 9 5-9 5-9-5 9-5Z', 'm3 12 9 5 9-5', 'm3 16 9 5 9-5'],
@@ -468,24 +472,75 @@ select.bqs-control { appearance: none; padding-right: 34px; cursor: pointer; }
           ctx.slots.inject('settings.section', () => ctx.slots.register({ name: 'settings.section', id, order, label }, Page));
         }
         const publicURL = window.__SOYO_DASHBOARD_URL__;
-        if (publicURL) {
-          const url = new URL(publicURL);
-          if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash || url.pathname !== '/') throw new Error('Dashboard browser URL must be clean.');
-          const ManagementPage = () => React.createElement(React.Fragment, {}, React.createElement('style', {}, STYLES),
-            React.createElement('div', { className: 'bqs-page' },
-              React.createElement('header', { className: 'bqs-top' },
-                React.createElement('div', { className: 'bqs-mark' }, icon('external', 21)),
-                React.createElement('div', {}, React.createElement('div', { className: 'bqs-top-title' }, '管理 Web'),
-                  React.createElement('p', { className: 'bqs-top-caption' }, '独立实例控制台 · 不继承 DSH 登录身份'))),
-              React.createElement('div', { className: 'bqs-scroll' },
-                React.createElement('section', { className: 'bqs-card' },
-                  React.createElement('div', { className: 'bqs-card-body' },
-                    React.createElement('p', {}, '用于查看服务状态、日志和实例配置；密钥与登录状态不共享。'),
-                    React.createElement('div', { className: 'bqs-row', style: { marginTop: 14 } },
-                      React.createElement('a', { className: 'bqs-button', href: url.origin, target: '_blank', rel: 'noopener noreferrer' },
-                        '打开管理 Web ↗', icon('external', 14))))))));
-          ctx.slots.inject('settings.section', () => ctx.slots.register({ name: 'settings.section', id: 'soyo-dashboard', order: 34, label: '管理 Web' }, ManagementPage));
-        }
+        const managementURL = publicURL ? new URL(publicURL) : null;
+        if (managementURL && (!['http:', 'https:'].includes(managementURL.protocol) || managementURL.username || managementURL.password || managementURL.search || managementURL.hash || managementURL.pathname !== '/')) throw new Error('Dashboard browser URL must be clean.');
+        const callSetup = async (method, request) => {
+          const result = await setupConnection.rpc.call('/api', 'botSetup/' + method, { args: request === undefined ? {} : { request } });
+          if (!result.ok) throw Error(result.error?.message || '管理操作未完成');
+          return result.value;
+        };
+        const ManagementPage = () => {
+          const [status, setStatus] = React.useState(null);
+          const [service, setService] = React.useState('manager');
+          const [lines, setLines] = React.useState([]);
+          const [notice, setNotice] = React.useState('');
+          const [busy, setBusy] = React.useState(false);
+          const refresh = async () => {
+            const next = await callSetup('status');
+            setStatus(next);
+            const log = await callSetup('logs', { service });
+            setLines(log.lines || []);
+          };
+          React.useEffect(() => { refresh().catch(error => setNotice(error.message)); }, []);
+          React.useEffect(() => {
+            const timer = setInterval(() => { callSetup('logs', { service }).then(value => setLines(value.lines || [])).catch(() => {}); }, 2500);
+            return () => clearInterval(timer);
+          }, [service]);
+          const control = async (operation, name) => {
+            setBusy(true); setNotice('');
+            try { await callSetup('service', { operation, service: name }); await refresh(); setNotice('操作已提交；请核对状态与日志。'); }
+            catch (error) { setNotice(error.message); } finally { setBusy(false); }
+          };
+          const stateText = (name, row) => name === 'gateway'
+            ? ({ disabled: '未启用', stopped: '未连接', connected: '最近心跳正常', connecting: '正在连接', stale: '心跳已过期', disconnected: '已断开' })[row.state] || '尚未确认'
+            : row.running ? '运行中' : '未运行';
+          return h(React.Fragment, {}, h('style', {}, STYLES),
+            h('div', { className: 'bqs-page' },
+              h('header', { className: 'bqs-top' },
+                h('div', { className: 'bqs-mark' }, icon('external', 21)),
+                h('div', {}, h('div', { className: 'bqs-top-title' }, '管理 Web'),
+                  h('p', { className: 'bqs-top-caption' }, '本实例的服务状态、启停与运行日志'))),
+              h('div', { className: 'bqs-scroll' },
+                notice && h('div', { className: 'bqs-notice', 'data-kind': 'error', role: 'status', 'aria-live': 'polite' }, icon('info', 15), h('span', {}, notice)),
+                h('section', { className: 'bqs-card' },
+                  h('div', { className: 'bqs-card-head' }, h('h3', { className: 'bqs-card-title' }, icon('layers', 16), '服务')),
+                  h('div', { className: 'bqs-card-body' },
+                    status ? Object.entries(status.services).map(([name, row]) => h('div', { className: 'bqs-service-row', key: name },
+                      h('div', {}, h('span', { className: 'bqs-service-name' }, name),
+                        h('span', { className: 'bqs-hint' }, stateText(name, row) + (row.pid ? ' · PID ' + row.pid : ''))),
+                      ['napcat', 'live2d'].includes(name) && h('button', { type: 'button', className: 'bqs-button', 'data-variant': 'soft', disabled: busy,
+                        onClick: () => control(row.running ? 'stop' : 'start', name) }, row.running ? '停止' : '启动'))) :
+                      h('div', { className: 'bqs-skeleton' }, h('span'), h('span'))),
+                  h('div', { className: 'bqs-card-tail' }, h('div', { className: 'bqs-row' },
+                    h('button', { type: 'button', className: 'bqs-button', 'data-variant': 'primary', disabled: busy,
+                      onClick: () => control('start', 'native') }, icon('play', 14), '启动原生 Web'),
+                    h('button', { type: 'button', className: 'bqs-button', 'data-variant': 'ghost', disabled: busy,
+                      onClick: () => control('stop', 'native') }, '停止原生服务')))),
+                h('section', { className: 'bqs-card' },
+                  h('div', { className: 'bqs-card-head' }, h('h3', { className: 'bqs-card-title' }, icon('info', 16), '运行日志'),
+                    h('div', { className: 'bqs-head-action' }, h('label', { className: 'bqs-select' },
+                      h('select', { className: 'bqs-control', 'aria-label': '日志服务', value: service, onChange: event => setService(event.target.value) },
+                        ...['manager', 'web', 'gateway', 'napcat', 'live2d'].map(name => h('option', { key: name, value: name }, name))), icon('down', 14)))),
+                  h('div', { className: 'bqs-card-body' },
+                    h('pre', { className: 'bqs-logs' }, lines.length ? lines.join('\n') : '暂无日志。'),
+                    h('p', { className: 'bqs-hint' }, '密钥会脱敏。回合结束不等于 QQ 已发送，以通道真实回执为准。')),
+                  h('div', { className: 'bqs-card-tail' }, h('div', { className: 'bqs-row' },
+                    h('button', { type: 'button', className: 'bqs-button', 'data-variant': 'ghost',
+                      onClick: () => refresh().catch(error => setNotice(error.message)) }, icon('refresh', 14), '刷新'),
+                    managementURL && h('a', { className: 'bqs-button', 'data-variant': 'ghost', href: managementURL.origin, target: '_blank', rel: 'noopener noreferrer' },
+                      '打开独立管理 Web ↗', icon('external', 14))))))));
+        };
+        ctx.slots.inject('settings.section', () => ctx.slots.register({ name: 'settings.section', id: 'soyo-dashboard', order: 34, label: '管理 Web' }, ManagementPage));
       },
     };
   },
