@@ -402,12 +402,14 @@ export class BasicCompactionEngine extends CompactionEngine {
    * @param agent - idle agent whose next-turn admission this call reserves.
    * @param signal - cancellation scoped to this compaction request.
    * @param sourceCommandId - initiating command identity for presentation correlation.
+   * @param options - optional `keepFrom`: first surface node kept verbatim instead of the 0-token tail.
    * @returns the committed result, or `null` when no safe useful range exists.
    */
   override compactNow(
     agent: Agent,
     signal: AbortSignal,
     sourceCommandId?: CommandId,
+    options?: { readonly keepFrom?: SessionSeq },
   ): Promise<CompactionResult | null> {
     signal.throwIfAborted()
     try {
@@ -419,6 +421,7 @@ export class BasicCompactionEngine extends CompactionEngine {
             agent.session,
             this.ctx.tokenMeter.measure(agent.session),
             0,
+            options?.keepFrom,
           )
           if (range === null) return null
           return await compactSurfaceRegion(
