@@ -112,12 +112,14 @@ function systemHead(session: Session, headSeq: SessionSeq): SessionEvent<'system
  * @param session - session supplying authoritative current surface positions.
  * @param measurement - unified pressure and surface measurement from the conversation meter.
  * @param retainTokens - minimum recent tail budget retained verbatim.
+ * @param keepFrom - first surface node to retain verbatim; replaces the priced tail when given.
  * @returns the inclusive positional seq range to compact, or `null`.
  */
 export function selectCompactableRange(
   session: Session,
   measurement: TokenMeasurement,
   retainTokens: number,
+  keepFrom?: SessionSeq,
 ): { start: SessionSeq; end: SessionSeq } | null {
   const pricedNodes = measurement.nodes
   if (pricedNodes.length === 0) return null
@@ -137,6 +139,10 @@ export function selectCompactableRange(
     accumulated += pricedNodes[index]!.tokens
     keepFromIdx = index
     if (accumulated >= retainTokens) break
+  }
+  if (keepFrom !== undefined) {
+    keepFromIdx = surfaceNodes.indexOf(keepFrom)
+    if (keepFromIdx < 0) throw new Error('compaction: keepFrom is not a current surface node')
   }
   if (keepFromIdx <= firstIdx) return null
 
