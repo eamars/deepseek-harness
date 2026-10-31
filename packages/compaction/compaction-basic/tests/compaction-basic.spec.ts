@@ -876,6 +876,43 @@ describe('pressure measurement and retention', () => {
       .rejects.toThrow(/still above threshold after 1 compaction attempts/)
   })
 
+  it('counts the retained tail in provider tokens when usage reports more than the estimate', async () => {
+    // One open-turn step after closed turns; `usage`, when given, is the provider's report of that request.
+    const reported = (usage?: TokenUsage): Session => {
+      const session = conversation(6)
+      session.append('user/message', createUserMessage({
+        content: [{ type: 'text', text: 'fixture '.repeat(40).trim() }],
+        source: { kind: 'user' },
+      }), { surfaceOp: 'append' })
+      session.append('step/start', { turn: 7, step: 1 })
+      session.append('assistant/message', {
+        stream: [],
+        turn: 7,
+        step: 1,
+        ...usage === undefined ? {} : { usage },
+        message: createMessage({
+          role: 'assistant',
+          content: [{ type: 'text', text: 'fixture '.repeat(40).trim() }],
+          source: { kind: 'model', provider: MODEL, model: MODEL },
+        }),
+      }, { surfaceOp: 'append' })
+      session.append('step/end', { turn: 7, step: 1 })
+      return session
+    }
+    const estimated = createContext().tokenMeter.measure(reported()).totalTokens
+    // The provider counts twice the estimate: the threshold sits between the two, and a tail of
+    // `retainTokens` read as an estimate would hold twice that, more than the threshold leaves room for.
+    const contextWindow = 3 * estimated
+    const ctx = createContext(contextWindow)
+    const compact = service({ auto: false, thresholdRatio: 0.5, retainTokens: Math.floor(0.6 * estimated) }, ctx)
+    const session = reported({ inputTokens: 2 * estimated, outputTokens: 0 })
+    expect(ctx.tokenMeter.measure(session).totalTokens).toBeGreaterThanOrEqual(contextWindow / 2)
+
+    expect(await compactIfNeeded(compact, session)).not.toBeNull()
+    expect(compact.calls).toHaveLength(1)
+    expect(ctx.tokenMeter.measure(session).totalTokens).toBeLessThan(contextWindow / 2)
+  })
+
   it('rounds a retention cut head-ward to preserve tool-call/result pairing', async () => {
     const compact = service({
       auto: false,

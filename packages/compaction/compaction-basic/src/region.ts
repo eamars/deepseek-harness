@@ -105,6 +105,25 @@ function systemHead(session: Session, headSeq: SessionSeq): SessionEvent<'system
 }
 
 /**
+ * Convert a retained-tail budget in provider tokens to the unit node prices use.
+ * Pressure rests on provider usage when the meter has it, while each node is
+ * priced by the fixed text-density estimate; a tail counted in the estimate can
+ * then be larger than the threshold it is meant to leave room under. The ratio
+ * is the anchored request's estimated surface over its provider-reported size;
+ * its tools are in the size but not the surface, so the budget errs small.
+ * Without a usage baseline both sides are estimates and the budget is unchanged.
+ * @param measurement - unified pressure and surface measurement from the conversation meter.
+ * @param retainTokens - recent tail budget in provider tokens.
+ * @returns the same budget in node-price tokens.
+ */
+export function estimatedTailBudget(measurement: TokenMeasurement, retainTokens: number): number {
+  const { baseline } = measurement
+  if (baseline.kind !== 'usage') return retainTokens
+  const anchoredSurfaceTokens = measurement.surfaceTokens - measurement.surfaceDeltaTokens
+  return Math.floor(retainTokens * anchoredSurfaceTokens / baseline.tokens)
+}
+
+/**
  * Resolve the next range starting at the first non-system surface node while
  * retaining a priced recent tail and never splitting an assistant
  * tool-call/result pair. A `system/message` at surface node 0 is never inside

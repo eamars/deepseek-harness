@@ -25,6 +25,7 @@ import {
 import {
   assertNoActiveCompaction,
   compactSurfaceRegion,
+  estimatedTailBudget,
   selectCompactableRange,
 } from './region.ts'
 import { summarizeWithLlm } from './summarizer.ts'
@@ -328,7 +329,11 @@ export class BasicCompactionEngine extends CompactionEngine {
 
     let result: CompactionResult | null = null
     for (let attempt = 0; attempt <= spec.compactionRetries; attempt += 1) {
-      const range = selectCompactableRange(agent.session, measurement, spec.retainTokens)
+      const range = selectCompactableRange(
+        agent.session,
+        measurement,
+        estimatedTailBudget(measurement, spec.retainTokens),
+      )
       if (range === null) {
         /* v8 ignore else -- concrete replacement preserves a compactable checkpoint; subclass hooks cannot mutate it. */
         if (result === null) return null
