@@ -92,6 +92,23 @@ describe('SCH. Schedule', () => {
     const finished = (await service.catalog()).find(row => row.id === plan.id) as { status?: string } | undefined
     expect(finished?.status).toBe('inactive')
   })
+
+  it('SCH-5 a plugin\'s own create, retime and delete put nothing into the session', async () => {
+    const { ctx, service, resolve } = await schedule()
+    const agent = agentFor(ctx, 'sch-5')
+    const inject = vi.spyOn(agent, 'inject')
+    const steer = vi.spyOn(agent, 'steer')
+    resolve.mockResolvedValue({ agent })
+    const plan = await service.create(agent.session.id, { title: 'rhythm', prompt: PROMPT, every_seconds: 3_600 })
+    const expected = (await service.list({ sessionId: agent.session.id })).find(row => row.id === plan.id)!
+    await service.update({ sessionId: agent.session.id, id: plan.id, expected, change: { kind: 'every', every_seconds: 1_800 } })
+    await service.delete({ sessionId: agent.session.id, id: plan.id })
+    await vi.advanceTimersByTimeAsync(10)
+    expect(inject).not.toHaveBeenCalled()
+    expect(steer).not.toHaveBeenCalled()
+    expect(agent.followup).not.toHaveBeenCalled()
+    expect(agent.session.snapshotEvents()).toEqual([])
+  })
 })
 
 describe('SCH. The Web Host provides it', () => {

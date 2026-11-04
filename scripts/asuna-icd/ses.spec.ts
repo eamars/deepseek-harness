@@ -154,7 +154,7 @@ describe('SES. Sessions', () => {
     expect(assistant.data.usage).toMatchObject({ inputTokens: expect.any(Number) as number })
   })
 
-  it('SES-9 a loaded session\'s context-pressure and context-breakdown projections and its current preset are readable', async () => {
+  it('SES-9 SES-11 a loaded session\'s context-pressure and context-breakdown projections, and its current preset, are readable', async () => {
     const run = await persisted(new ScriptedModel([text('ok')]))
     await run.ctx.plugin(TokenMeter)
     const agent = await open(run.ctx, 'ses-9')
