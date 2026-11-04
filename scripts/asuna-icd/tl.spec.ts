@@ -69,7 +69,7 @@ describe('TL. Prompt and tools', () => {
     expect(at('packages/core/system-prompt/src/index.ts')).toContain("'harness:identity'")
     expect(at('packages/context/harness-dev-context/src/index.ts')).toContain("'harness:source'")
     expect(at('packages/context/harness-dev-context/src/index.ts')).toContain("'app:web-surface'")
-    expect(at('packages/client/ui-deliverables/src/index.ts')).toContain("'ui:deliverable-file-references'")
+    expect(at('packages/deliverables/deliverable-file-references/src/index.ts')).toContain("'ui:deliverable-file-references'")
     expect(at('packages/web/tool-web/src/search.ts')).toContain("'tool:web_search'")
     expect(at('packages/session/working-directory/src/index.ts')).toContain("'working-directory:current'")
   })

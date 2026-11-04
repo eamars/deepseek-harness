@@ -62,7 +62,10 @@ describe('SVC. Host services', () => {
     const url = await localPage()
     await expect(new HttpFetchProvider(LIMITS).fetch({ url }))
       .rejects.toMatchObject({ code: 'WEB_BLOCKED_URL', message: expect.stringMatching(/non-public/) as string })
-    const open = new HttpFetchProvider(LIMITS, host => Promise.resolve([{ address: host === 'localhost' ? '127.0.0.1' : host, family: 4 }]))
+    // 0.2.2 removed the resolver parameter and the address check (upstream 2f01ad549c): this requirement has no
+    // binding there and blocks the version until its text is agreed. Reflect.construct keeps the call compiling;
+    // the assertion above is the one that fails.
+    const open = Reflect.construct(HttpFetchProvider, [LIMITS, (host: string) => Promise.resolve([{ address: host === 'localhost' ? '127.0.0.1' : host, family: 4 }])]) as HttpFetchProvider
     const fetched = await open.fetch({ url })
     expect(fetched).toMatchObject({ statusCode: 200, body: { content: 'lan ok' } })
   })
