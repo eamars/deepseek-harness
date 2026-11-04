@@ -47,6 +47,37 @@ async function plansOf(service: Context['schedule'], sessionId: SessionId) {
   return page.items.filter(row => row.target.kind === 'session' && row.target.sessionId === sessionId)
 }
 
+/**
+ * A plugin creates, retimes and deletes a plan of a live session. With `asOwner`, each call names that session as the
+ * actor (0.2.2 sends a `[SCHEDULE CHANGE]` notice to every involved live session except the actor).
+ */
+export async function ownChanges(asOwner: boolean) {
+  const { ctx, service, resolve } = await schedule()
+  const agent = agentFor(ctx, 'sch-5')
+  resolve.mockResolvedValue({ agent } as never)
+  // The session is live while the plugin changes its plans, as Asuna's sessions are.
+  const live = ctx.agents.get.bind(ctx.agents)
+  vi.spyOn(ctx.agents, 'get').mockImplementation(id => (id === agent.session.id ? agent as never : live(id)))
+  const steer = vi.spyOn(agent, 'steer')
+  const actor = asOwner ? agent.session.id : undefined
+  const plan = await service.create({
+    title: 'rhythm', prompt: PROMPT, timing: { kind: 'every', every_seconds: 3_600 }, ...forSession(agent.session.id),
+  }, actor)
+  const read = await service.view({ id: plan.id })
+  await vi.advanceTimersByTimeAsync(1_000)
+  await service.edit({
+    id: plan.id, action: 'update', patch: { timing: { kind: 'every', every_seconds: 1_800 } },
+    expectedUpdatedAt: 'code' in read ? null : read.updatedAt ?? null,
+  }, actor)
+  await service.edit({ id: plan.id, action: 'delete' }, actor)
+  await vi.advanceTimersByTimeAsync(10)
+  return {
+    session: agent.session,
+    injected: () => agent.inject.mock.calls.map(([message]) => message),
+    calls: () => ({ inject: agent.inject.mock.calls.length, steer: steer.mock.calls.length, followup: agent.followup.mock.calls.length }),
+  }
+}
+
 describe('SCH. Schedule', () => {
   it('SCH-1 one-shot and recurring plans are created for a session, and the prompt round-trips verbatim', async () => {
     const { service } = await schedule()
@@ -117,20 +148,9 @@ describe('SCH. Schedule', () => {
   })
 
   it('SCH-5 a plugin\'s own create, retime and delete put nothing into the session', async () => {
-    const { ctx, service, resolve } = await schedule()
-    const agent = agentFor(ctx, 'sch-5')
-    const inject = vi.spyOn(agent, 'inject')
-    const steer = vi.spyOn(agent, 'steer')
-    resolve.mockResolvedValue({ agent })
-    const plan = await service.create(agent.session.id, { title: 'rhythm', prompt: PROMPT, every_seconds: 3_600 })
-    const expected = (await service.list({ sessionId: agent.session.id })).find(row => row.id === plan.id)!
-    await service.update({ sessionId: agent.session.id, id: plan.id, expected, change: { kind: 'every', every_seconds: 1_800 } })
-    await service.delete({ sessionId: agent.session.id, id: plan.id })
-    await vi.advanceTimersByTimeAsync(10)
-    expect(inject).not.toHaveBeenCalled()
-    expect(steer).not.toHaveBeenCalled()
-    expect(agent.followup).not.toHaveBeenCalled()
-    expect(agent.session.snapshotEvents()).toEqual([])
+    const { session, calls } = await ownChanges(true)
+    expect(calls()).toEqual({ inject: 0, steer: 0, followup: 0 })
+    expect(session.snapshotEvents()).toEqual([])
   })
 })
 
