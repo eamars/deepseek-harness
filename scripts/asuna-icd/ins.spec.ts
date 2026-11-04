@@ -1,5 +1,5 @@
 /**
- * INS and PEER: source checks. Each one checks that DSH still names a CLI flag, profile row, home path or gateway
+ * INS, PEER, SES-4 and FW-4: source checks. Each one checks that DSH still names a CLI flag, profile row, home path or gateway
  * route Asuna's launcher, installer and peer channel rely on (README.md, INS and PEER). Installing a real plugin,
  * starting a Host and following a peer are checked at the upgrade routine's review step.
  */
@@ -102,5 +102,21 @@ describe('INS. Plugin compatibility (behaviour)', () => {
     const refused = evaluatePluginCompatibility(plugin('0.0.1'), {}, runtime)
     expect(refused?.exempted).toBe(false)
     expect(Object.keys(refused?.requirements ?? {})).toEqual(expect.arrayContaining(['@deepseek-ai/dsh-agent', '@deepseek-ai/dsh-llm']))
+  })
+})
+
+describe('Host facts a plugin reads (source checks)', () => {
+  it('SES-4 the projection cache takes a cold snapshot and writes it, and a session-added event reaches open browsers', () => {
+    const cache = sources('packages/session/session-projection-cache/src')
+    for (const method of ['coldSnapshot(', 'cachedSnapshot(', 'async write(']) expect(cache, method).toContain(method)
+    expect(sources('packages/api/remotes/src')).toMatch(/event: 'api-session\/added', mode: 'emit'/)
+    expect(sources('packages/api/session-controller/src')).toContain('$on(\'api-session/added\'')
+  })
+
+  it('FW-4 a profile launched by dsh exposes its profile context with the profile\'s name and DSH home', () => {
+    const profile = read('packages/boot/app-boot/src/profile-context.ts')
+    expect(profile).toContain('profileContext: ProfileContext')
+    expect(profile).toMatch(/readonly name: string/)
+    expect(profile).toMatch(/readonly home: string/)
   })
 })

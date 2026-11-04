@@ -181,13 +181,15 @@ behaviour.
 | `llm.spec.ts` | LLM-1, LLM-2, LLM-3, LLM-4 | behaviour; LLM-4 a source check of the failure codes |
 | `wire.spec.ts` | LLM-1, SES-6 | behaviour, through the pi-ai and DeepSeek adapters |
 | `ses.spec.ts` | SES-1, SES-3, SES-5, SES-6, SES-7, SES-9, SES-10, SES-11 | behaviour |
-| `cmp.spec.ts` | CMP-1, CMP-2, CMP-3 | behaviour |
+| `cmp.spec.ts` | CMP-1, CMP-2, CMP-3, CMP-5, TL-6 | behaviour |
 | `sch.spec.ts` | SCH-1, SCH-2, SCH-3, SCH-4, SCH-5 | behaviour on DSH's schedule test harness; SCH-4 a source check |
 | `svc.spec.ts` | SVC-1, SVC-2, SVC-4, SVC-5, SVC-6 | behaviour; SVC-6 checks the exports only |
 | `fw.spec.ts` | FW-1, FW-3 | behaviour |
+| `ws.spec.ts` | SES-8 | behaviour on DSH's storage domain with a memory backend |
 | `ui.spec.ts` | UI-1 to UI-11 | source checks |
-| `ins.spec.ts` | INS-1, INS-3, INS-4, INS-5, INS-6, INS-7, PEER-1, PEER-2 | source checks; INS-3 and INS-7's session folders behaviour |
+| `ins.spec.ts` | INS-1, INS-3, INS-4, INS-5, INS-6, INS-7, PEER-1, PEER-2, SES-4, FW-4 | source checks; INS-3 and INS-7's session folders behaviour |
 
-Not covered yet: INS-2, INS-8, FW-2, FW-4, SES-2, SES-4, SES-8, TL-6, CMP-4, CMP-5, SVC-3; within covered
-requirements, TRN-2's maintenance-as-idle, SCH-3's one fired plan per turn, SES-11 following a later preset pick, and every UI behaviour
-(rendering is reviewed in a browser at the upgrade routine's review step).
+Not covered yet: INS-2 and INS-8 (they need a real `dsh plugin add` into a profile), FW-2, SES-2, CMP-4, and SVC-3
+(platform-bound). Within covered requirements: TRN-2's maintenance-as-idle, SCH-3's one fired plan per turn, SES-11
+following a later preset pick, and every UI behaviour (rendering is reviewed in a browser at the upgrade routine's
+review step).
