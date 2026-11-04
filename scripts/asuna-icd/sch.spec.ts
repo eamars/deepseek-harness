@@ -89,6 +89,9 @@ describe('SCH. Schedule', () => {
     const message = agent.followup.mock.calls[0]![0]
     expect(message.source).toMatchObject({ kind: 'schedule' })
     expect(firedPlans(message).map(fired => fired.schedule_id)).toContain(plan.id)
+    // A firing is told from any other schedule-sourced message (0.2.2's change notice) by its first line.
+    const first = message.content.flatMap(block => (block.type === 'text' ? [block.text] : [])).join('\n').split('\n')[0]
+    expect(first).toMatch(/^\[SCHEDULE REMINDER/)
     const finished = (await service.catalog()).find(row => row.id === plan.id) as { status?: string } | undefined
     expect(finished?.status).toBe('inactive')
   })
