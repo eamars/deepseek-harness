@@ -37,17 +37,27 @@ function firedPlans(message: UserMessage): { schedule_id: string; occurrence_at?
   return []
 }
 
+/** A plan delivered into one existing session, made by that session so DSH writes it no change notice. */
+function forSession(sessionId: SessionId) {
+  return { target: { kind: 'session' as const, sessionId } }
+}
+
+async function plansOf(service: Context['schedule'], sessionId: SessionId) {
+  const page = await service.list({ limit: 100 })
+  return page.items.filter(row => row.target.kind === 'session' && row.target.sessionId === sessionId)
+}
+
 describe('SCH. Schedule', () => {
   it('SCH-1 one-shot and recurring plans are created for a session, and the prompt round-trips verbatim', async () => {
     const { service } = await schedule()
     const sessionId = SessionId('sch-1')
-    const once = await service.create(sessionId, { title: 'once', prompt: PROMPT, after_seconds: 600 })
-    const every = await service.create(sessionId, { title: 'every', prompt: PROMPT, every_seconds: 3_600 })
-    const daily = await service.create(sessionId, { title: 'daily', prompt: PROMPT, daily: { time: '08:30:00', time_zone: 'Europe/Paris' } })
-    const weekly = await service.create(sessionId, {
-      title: 'weekly', prompt: PROMPT, weekly: { time: '21:00:00', time_zone: 'Europe/Paris', weekdays: [1, 3, 7] },
-    })
-    const rows = await service.list({ sessionId })
+    const make = (title: string, timing: Parameters<typeof service.create>[0]['timing']) =>
+      service.create({ title, prompt: PROMPT, timing, ...forSession(sessionId) }, sessionId)
+    const once = await make('once', { kind: 'after', after_seconds: 600 })
+    const every = await make('every', { kind: 'every', every_seconds: 3_600 })
+    const daily = await make('daily', { kind: 'daily', daily: { time: '08:30:00', time_zone: 'Europe/Paris' } })
+    const weekly = await make('weekly', { kind: 'weekly', weekly: { time: '21:00:00', time_zone: 'Europe/Paris', weekdays: [1, 3, 7] } })
+    const rows = await plansOf(service, sessionId)
     expect(rows.map(row => row.id).sort()).toEqual([once.id, every.id, daily.id, weekly.id].sort())
     expect(new Set(rows.map(row => row.kind))).toEqual(new Set(['after', 'every', 'daily', 'weekly']))
     for (const row of rows) {
@@ -59,38 +69,51 @@ describe('SCH. Schedule', () => {
   it('SCH-2 a plan is retimed in place under an optimistic check, listed with its next fire time, and deleted', async () => {
     const { service } = await schedule()
     const sessionId = SessionId('sch-2')
-    const plan = await service.create(sessionId, { title: 'rhythm', prompt: PROMPT, every_seconds: 3_600 })
-    const expected = (await service.list({ sessionId })).find(row => row.id === plan.id)!
-    const result = await service.update({ sessionId, id: plan.id, expected, change: { kind: 'every', every_seconds: 900 } })
-    expect(result).toMatchObject({ updated: true })
-    const after = (await service.list({ sessionId })).find(row => row.id === plan.id)!
-    expect(after.id).toBe(plan.id)
-    expect((after as { everySeconds?: number }).everySeconds).toBe(900)
-    await expect(service.update({ sessionId, id: plan.id, expected, change: { kind: 'every', every_seconds: 60 } }))
-      .resolves.toMatchObject({ updated: false })
+    const plan = await service.create({ title: 'rhythm', prompt: PROMPT, timing: { kind: 'every', every_seconds: 3_600 }, ...forSession(sessionId) }, sessionId)
+    const read = async () => {
+      const row = await service.view({ id: plan.id })
+      if ('code' in row) throw new Error(`plan ${plan.id}: ${row.code}`)
+      return row
+    }
+    const expected = await read()
+    // Each edit happens at a later instant, so the revision it stamps differs from the one it was checked against.
+    await vi.advanceTimersByTimeAsync(1_000)
+    const result = await service.edit({
+      id: plan.id, action: 'update', patch: { timing: { kind: 'every', every_seconds: 900 } }, expectedUpdatedAt: expected.updatedAt ?? null,
+    }, sessionId)
+    expect(result).toMatchObject({ id: plan.id, kind: 'every', everySeconds: 900 })
+    await vi.advanceTimersByTimeAsync(1_000)
+    await expect(service.edit({
+      id: plan.id, action: 'update', patch: { timing: { kind: 'every', every_seconds: 60 } }, expectedUpdatedAt: expected.updatedAt ?? null,
+    }, sessionId)).resolves.toMatchObject({ id: plan.id, code: 'schedule_conflict' })
 
-    const daily = (await service.list({ sessionId })).find(row => row.id === plan.id)!
-    await service.update({ sessionId, id: plan.id, expected: daily, change: { kind: 'daily', daily: { time: '07:00:00', time_zone: 'Europe/Paris' } } })
-    expect((await service.list({ sessionId })).find(row => row.id === plan.id)).toMatchObject({ kind: 'daily', time: expect.stringMatching(/^07:00:00/) as string })
+    const current = await read()
+    await service.edit({
+      id: plan.id, action: 'update', patch: { timing: { kind: 'daily', daily: { time: '07:00:00', time_zone: 'Europe/Paris' } } },
+      expectedUpdatedAt: current.updatedAt ?? null,
+    }, sessionId)
+    expect(await read()).toMatchObject({ id: plan.id, kind: 'daily', time: expect.stringMatching(/^07:00:00/) as string })
 
     const catalog = await service.catalog()
-    expect(catalog.find(row => row.id === plan.id)).toMatchObject({ sessionId, scheduledAt: expect.any(String) as string })
-    await service.delete({ sessionId, id: plan.id })
-    expect(await service.list({ sessionId })).toEqual([])
+    expect(catalog.find(row => row.id === plan.id)).toMatchObject({ target: { kind: 'session', sessionId }, scheduledAt: expect.any(String) as string })
+    expect(await service.edit({ id: plan.id, action: 'delete' }, sessionId)).toEqual({ id: plan.id, deleted: true })
+    expect(await plansOf(service, sessionId)).toEqual([])
   })
 
   it('SCH-3 a plan fires into its own session as a schedule message naming the plan and the occurrence', async () => {
     const { ctx, service, resolve } = await schedule()
     const agent = agentFor(ctx, 'sch-3')
-    resolve.mockResolvedValue({ agent })
-    const plan = await service.create(agent.session.id, { title: 'soon', prompt: PROMPT, after_seconds: 1 })
+    resolve.mockResolvedValue({ agent } as never)
+    const plan = await service.create({
+      title: 'soon', prompt: PROMPT, timing: { kind: 'after', after_seconds: 1 }, ...forSession(agent.session.id),
+    }, agent.session.id)
     await vi.advanceTimersByTimeAsync(2_000)
     expect(agent.followup).toHaveBeenCalled()
     const message = agent.followup.mock.calls[0]![0]
     expect(message.source).toMatchObject({ kind: 'schedule' })
     expect(firedPlans(message).map(fired => fired.schedule_id)).toContain(plan.id)
-    const finished = (await service.catalog()).find(row => row.id === plan.id) as { status?: string } | undefined
-    expect(finished?.status).toBe('inactive')
+    const finished = (await service.catalog()).find(row => row.id === plan.id)
+    expect(finished?.status).toBe('ended')
   })
 
   it('SCH-5 a plugin\'s own create, retime and delete put nothing into the session', async () => {
