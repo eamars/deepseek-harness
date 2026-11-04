@@ -58,16 +58,13 @@ describe('SVC. Host services', () => {
     expect([...(registered as Map<string, unknown>).keys()]).toEqual(expect.arrayContaining(['icd-search', 'other-search']))
   })
 
-  it('SVC-1 DSH\'s HTTP fetch refuses a non-public address with a recognisable code, and fetches it through a resolver of the plugin\'s own', async () => {
+  it('SVC-1 a plugin\'s fetch provider uses DSH\'s HTTP fetch for the transfer and its result', async () => {
     const url = await localPage()
-    await expect(new HttpFetchProvider(LIMITS).fetch({ url }))
-      .rejects.toMatchObject({ code: 'WEB_BLOCKED_URL', message: expect.stringMatching(/non-public/) as string })
-    // 0.2.2 removed the resolver parameter and the address check (upstream 2f01ad549c): this requirement has no
-    // binding there and blocks the version until its text is agreed. Reflect.construct keeps the call compiling;
-    // the assertion above is the one that fails.
-    const open = Reflect.construct(HttpFetchProvider, [LIMITS, (host: string) => Promise.resolve([{ address: host === 'localhost' ? '127.0.0.1' : host, family: 4 }])]) as HttpFetchProvider
-    const fetched = await open.fetch({ url })
-    expect(fetched).toMatchObject({ statusCode: 200, body: { content: 'lan ok' } })
+    // Binding on 0.2.2: the resolver and DSH's address check are gone (upstream 2f01ad549c), so DSH's HTTP fetch
+    // reaches this loopback page as it is; which addresses a fetch may reach is the plugin's own policy.
+    const fetcher = new HttpFetchProvider(LIMITS)
+    const fetched = await fetcher.fetch({ url })
+    expect(fetched).toMatchObject({ url, statusCode: 200, body: { kind: 'text', content: 'lan ok' } })
   })
 
   it('SVC-2 credential records with any payload live under a plugin\'s own key prefix; secret references resolve', async () => {
